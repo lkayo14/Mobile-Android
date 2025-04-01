@@ -1,0 +1,127 @@
+import android.net.Uri
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModel
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.UserProfileChangeRequest
+import com.google.firebase.database.*
+import com.google.firebase.storage.FirebaseStorage
+
+
+class ProfileViewModel : ViewModel() {
+
+    private val _profileImageUri = MutableLiveData<Uri?>()
+    val profileImageUri: LiveData<Uri?> = _profileImageUri
+
+    private val _profileName = MutableLiveData<String>()
+    val profileName: LiveData<String> = _profileName
+
+    private val _profileEmail = MutableLiveData<String>()
+    val profileEmail: LiveData<String> = _profileEmail
+
+    private val _updateStatus = MutableLiveData<String>()
+    val updateStatus: LiveData<String> = _updateStatus
+
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val storage: FirebaseStorage = FirebaseStorage.getInstance()
+    private val database: FirebaseDatabase = FirebaseDatabase.getInstance()
+    private val userRef: DatabaseReference = database.getReference("users")
+
+    private var userMatricula: String? = null
+
+    init {
+        val user = auth.currentUser
+        user?.let {
+            _profileImageUri.value = it.photoUrl
+            _profileName.value = it.displayName
+            _profileEmail.value = it.email
+
+            // Carregar matrícula do usuário do Realtime Database
+            userRef.child(it.uid).addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(dataSnapshot: DataSnapshot) {
+                    userMatricula = dataSnapshot.child("matricula").getValue(String::class.java)
+                }
+
+                override fun onCancelled(databaseError: DatabaseError) {
+                    _updateStatus.value = "Erro ao carregar matrícula: ${databaseError.message}"
+                }
+            })
+        }
+    }
+
+    fun updateProfile(name: String, email: String, imageUri: Uri?) {
+        val user = auth.currentUser
+        user?.let {
+            if (imageUri != null) {
+                // Use matrícula ou nome como referência de armazenamento
+                val storageRef = if (!userMatricula.isNullOrEmpty()) {
+                    storage.reference.child("profileImages/${userMatricula}.jpg")
+                } else {
+                    storage.reference.child("profileImages/${name}.jpg")
+                }
+
+                storageRef.putFile(imageUri)
+                    .addOnSuccessListener { taskSnapshot ->
+                        storageRef.downloadUrl.addOnSuccessListener { uri ->
+                            val profileUpdates = UserProfileChangeRequest.Builder()
+                                .setDisplayName(name)
+                                .setPhotoUri(uri)
+                                .build()
+                            updateUserProfile(user, profileUpdates)
+                        }
+                    }
+                    .addOnFailureListener { exception ->
+                        _updateStatus.value = "Falha ao atualizar imagem: ${exception.message}"
+                    }
+            } else {
+                val profileUpdates = UserProfileChangeRequest.Builder()
+                    .setDisplayName(name)
+                    .build()
+                updateUserProfile(user, profileUpdates)
+            }
+
+            user.updateEmail(email)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        _profileEmail.value = email
+                        // Atualizar no Realtime Database
+                        updateUserDatabase(name, email)
+                        _updateStatus.value = "Perfil atualizado com sucesso"
+                    } else {
+                        _updateStatus.value = "Falha ao atualizar E-mail: ${task.exception?.message}"
+                    }
+                }
+        } ?: run {
+            _updateStatus.value = "O usuário não está logado"
+        }
+    }
+
+    private fun updateUserProfile(user: FirebaseUser, profileUpdates: UserProfileChangeRequest) {
+        user.updateProfile(profileUpdates)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    _profileImageUri.value = user.photoUrl
+                    _profileName.value = user.displayName
+                } else {
+                    _updateStatus.value = "Falha ao atualizar perfil: ${task.exception?.message}"
+                }
+            }
+    }
+
+    private fun updateUserDatabase(name: String, email: String) {
+        val user = auth.currentUser
+        user?.let {
+            val userId = it.uid
+            userRef.child(userId).child("name").setValue(name)
+            userRef.child(userId).child("email").setValue(email)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        _updateStatus.value = "Dados atualizados com sucesso"
+                    } else {
+                        _updateStatus.value = "Falha ao atualizar dados no Realtime Database: ${task.exception?.message}"
+                    }
+                }
+        }
+    }
+}

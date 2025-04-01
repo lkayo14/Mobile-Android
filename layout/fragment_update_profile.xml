@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <ImageView
+        android:id="@+id/profileImageView"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:src="@drawable/ic_profile_placeholder"
+        android:contentDescription="@string/profile_image"
+        android:clickable="true"
+        android:focusable="true" />
+
+    <EditText
+        android:id="@+id/profileNameEditText"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="@string/name_updateprofile_hint" />
+
+    <EditText
+        android:id="@+id/profileEmailEditText"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="@string/email_updateprofile_hint" />
+
+    <Button
+        android:id="@+id/updateProfileButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/UpdateProfileButton" />
+
+</LinearLayout>
